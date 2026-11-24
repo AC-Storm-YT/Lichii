@@ -607,6 +607,8 @@ MainWindow::MainWindow(bool has_broken_vulkan)
                         nextendo_profile_force = true;
                     }
                 }
+                // The pull can rename the profile or change its avatar.
+                UpdateProfileButton();
                 if (pending) {
                     SyncNextendoProfile(false);
                 }
