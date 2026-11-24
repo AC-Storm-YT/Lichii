@@ -20,6 +20,9 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#elif defined(__linux__)
+#include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 namespace Steam {
@@ -237,7 +240,13 @@ std::optional<std::string> ReadText(const std::filesystem::path& path) {
     if (!file) {
         return std::nullopt;
     }
-    return std::string{std::istreambuf_iterator<char>(file), {}};
+    // libstdc++ throws when a read fails after the file opened, e.g. /proc/<pid>/comm of a
+    // process that exited in between.
+    try {
+        return std::string{std::istreambuf_iterator<char>(file), {}};
+    } catch (const std::ios_base::failure&) {
+        return std::nullopt;
+    }
 }
 
 /// The Steam account id (SteamID64 minus its base) that loginusers.vdf marks MostRecent.
@@ -452,11 +461,17 @@ bool IsSteamRunning() {
 #elif defined(__linux__)
     // Look for the client itself rather than ~/.steam/steam.pid: Flatpak Steam keeps its pid file
     // in its own home, and a sandboxed pid isn't the host's. Every install runs as "steam".
+    // Only this user's processes count: another user's Steam doesn't hold this user's files.
+    const uid_t user = getuid();
     std::error_code error;
     for (const auto& entry : std::filesystem::directory_iterator("/proc", error)) {
         const std::string name = entry.path().filename().string();
         if (name.empty() ||
             !std::all_of(name.begin(), name.end(), [](char c) { return c >= '0' && c <= '9'; })) {
+            continue;
+        }
+        struct stat info {};
+        if (stat(entry.path().c_str(), &info) != 0 || info.st_uid != user) {
             continue;
         }
         const auto comm = ReadText(entry.path() / "comm");
