@@ -449,9 +449,12 @@ void AddToSteam(const std::filesystem::path& command, const std::filesystem::pat
     std::error_code error;
     const Steam::Shortcut shortcut{
         .app_name = title,
-        .exe = command.string(),
-        .start_dir = command.parent_path().string(),
-        .icon = std::filesystem::is_regular_file(icon_path, error) ? icon_path.string() : "",
+        // Steam reads these as UTF-8; string() would use the Windows code page.
+        .exe = Common::FS::PathToUTF8String(command),
+        .start_dir = Common::FS::PathToUTF8String(command.parent_path()),
+        .icon = std::filesystem::is_regular_file(icon_path, error)
+                    ? Common::FS::PathToUTF8String(icon_path)
+                    : std::string{},
         .launch_options = arguments,
     };
     using Steam::AddResult;

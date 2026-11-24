@@ -15,6 +15,7 @@
 
 #include <boost/crc.hpp>
 
+#include "common/fs/fs_util.h"
 #include "common/logging.h"
 
 #ifdef _WIN32
@@ -261,11 +262,18 @@ std::optional<u64> MostRecentAccount(const std::filesystem::path& steam_root) {
             --depth;
             pending_key.clear();
         } else if (c == '"') {
-            const std::size_t end = text->find('"', i + 1);
-            if (end == std::string::npos) {
+            // Values escape quotes and backslashes (a display name can hold either).
+            std::string token;
+            std::size_t end = i + 1;
+            for (; end < text->size() && (*text)[end] != '"'; ++end) {
+                if ((*text)[end] == '\\' && end + 1 < text->size()) {
+                    ++end;
+                }
+                token.push_back((*text)[end]);
+            }
+            if (end >= text->size()) {
                 break;
             }
-            std::string token = text->substr(i + 1, end - i - 1);
             i = end;
             if (pending_key.empty()) {
                 pending_key = std::move(token);
@@ -442,22 +450,21 @@ bool IsSteamRunning() {
                    [](wchar_t c) { return static_cast<wchar_t>(std::towlower(c)); });
     return file == L"steam.exe";
 #elif defined(__linux__)
-    const char* home = std::getenv("HOME");
-    if (home == nullptr) {
-        return false;
+    // Look for the client itself rather than ~/.steam/steam.pid: Flatpak Steam keeps its pid file
+    // in its own home, and a sandboxed pid isn't the host's. Every install runs as "steam".
+    std::error_code error;
+    for (const auto& entry : std::filesystem::directory_iterator("/proc", error)) {
+        const std::string name = entry.path().filename().string();
+        if (name.empty() ||
+            !std::all_of(name.begin(), name.end(), [](char c) { return c >= '0' && c <= '9'; })) {
+            continue;
+        }
+        const auto comm = ReadText(entry.path() / "comm");
+        if (comm && (*comm == "steam\n" || *comm == "steam")) {
+            return true;
+        }
     }
-    const auto pid_text = ReadText(std::filesystem::path{home} / ".steam" / "steam.pid");
-    if (!pid_text) {
-        return false;
-    }
-    int pid = 0;
-    const auto [ptr, error] =
-        std::from_chars(pid_text->data(), pid_text->data() + pid_text->size(), pid);
-    if (error != std::errc{} || pid <= 0) {
-        return false;
-    }
-    const auto comm = ReadText(std::filesystem::path{"/proc"} / std::to_string(pid) / "comm");
-    return comm.has_value() && comm->starts_with("steam");
+    return false;
 #else
     return false;
 #endif
@@ -492,7 +499,7 @@ AddResult AddShortcut(const Shortcut& shortcut) {
     const auto updated = AddToShortcutsFile(current, shortcut, &replaced);
     if (!updated) {
         LOG_ERROR(Frontend, "Steam shortcuts file is not in the expected format: {}",
-                  path.string());
+                  Common::FS::PathToUTF8String(path));
         return AddResult::UnreadableFile;
     }
 
@@ -503,7 +510,8 @@ AddResult AddShortcut(const Shortcut& shortcut) {
         std::filesystem::copy_file(path, backup, std::filesystem::copy_options::overwrite_existing,
                                    error);
         if (error) {
-            LOG_ERROR(Frontend, "Could not back up {}: {}", path.string(), error.message());
+            LOG_ERROR(Frontend, "Could not back up {}: {}", Common::FS::PathToUTF8String(path),
+                      error.message());
             return AddResult::WriteFailed;
         }
     }
@@ -513,15 +521,18 @@ AddResult AddShortcut(const Shortcut& shortcut) {
         std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
         out.write(reinterpret_cast<const char*>(updated->data()),
                   static_cast<std::streamsize>(updated->size()));
+        // Closing writes what is still buffered, and can fail too.
+        out.close();
         if (!out) {
-            LOG_ERROR(Frontend, "Could not write {}", temporary.string());
+            LOG_ERROR(Frontend, "Could not write {}", Common::FS::PathToUTF8String(temporary));
             std::filesystem::remove(temporary, error);
             return AddResult::WriteFailed;
         }
     }
     std::filesystem::rename(temporary, path, error);
     if (error) {
-        LOG_ERROR(Frontend, "Could not replace {}: {}", path.string(), error.message());
+        LOG_ERROR(Frontend, "Could not replace {}: {}", Common::FS::PathToUTF8String(path),
+                  error.message());
         std::filesystem::remove(temporary, error);
         return AddResult::WriteFailed;
     }

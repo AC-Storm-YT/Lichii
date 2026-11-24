@@ -1,13 +1,19 @@
 // SPDX-FileCopyrightText: Copyright 2026 Lichii Emulator Project
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <random>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
+#include <fmt/format.h>
 
 #include "common/common_types.h"
+#include "common/scope_exit.h"
 #include "frontend_common/steam_shortcuts.h"
 
 namespace {
@@ -187,6 +193,50 @@ TEST_CASE("A file that isn't a Steam shortcuts file is left alone", "[frontend_c
     Vdf other;
     other.Map("appinfo").Int("version", 1).End().End();
     CHECK_FALSE(Steam::AddToShortcutsFile(other.bytes, Game).has_value());
+}
+
+TEST_CASE("The Steam account marked MostRecent wins, whatever its display name holds",
+          "[frontend_common]") {
+    const auto root = std::filesystem::temp_directory_path() /
+                      fmt::format("lichii-steam-{}", std::random_device{}());
+    SCOPE_EXIT {
+        std::error_code error;
+        std::filesystem::remove_all(root, error);
+    };
+    const auto write = [](const std::filesystem::path& path, std::string_view text) {
+        std::filesystem::create_directories(path.parent_path());
+        std::ofstream{path, std::ios::binary} << text;
+    };
+    // Account 222 saved its settings last, so it is the fallback when nothing is marked.
+    const auto older = root / "userdata" / "111" / "config" / "localconfig.vdf";
+    const auto newer = root / "userdata" / "222" / "config" / "localconfig.vdf";
+    write(older, "");
+    write(newer, "");
+    const auto now = std::filesystem::file_time_type::clock::now();
+    std::filesystem::last_write_time(older, now - std::chrono::hours{1});
+    std::filesystem::last_write_time(newer, now);
+
+    // Account 111 (SteamID64 76561197960265839) is marked, and its name escapes quotes and a
+    // backslash, so reading up to the next quote would lose track of the keys after it.
+    write(root / "config" / "loginusers.vdf", R"("users"
+{
+    "76561197960265839"
+    {
+        "AccountName"    "first"
+        "PersonaName"    "say \"hi\" \\"
+        "MostRecent"     "1"
+    }
+    "76561197960265950"
+    {
+        "AccountName"    "second"
+        "PersonaName"    "second"
+        "MostRecent"     "0"
+    }
+}
+)");
+    const auto config = Steam::FindAccountConfigDir(root);
+    REQUIRE(config.has_value());
+    CHECK(*config == root / "userdata" / "111" / "config");
 }
 
 } // Anonymous namespace
