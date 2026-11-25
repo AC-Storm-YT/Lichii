@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <string>
 #include <vector>
 #include <QString>
 #include <QWidget>
@@ -46,6 +47,8 @@ private:
 
     /// Open while a shutter sound plays, and briefly after
     SDL_AudioStream* audio_stream = nullptr;
+    /// The output device setting the stream was opened for
+    std::string audio_device_name;
     QTimer* audio_close_timer;
     std::vector<float> shutter_sound;
 };

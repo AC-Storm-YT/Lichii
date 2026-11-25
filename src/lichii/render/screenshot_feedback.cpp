@@ -104,6 +104,12 @@ void ScreenshotFeedback::PlayShutter(float gain) {
     if (gain <= 0.0f) {
         return;
     }
+    // The output device the game's sound goes to. A stream still open on another device (the
+    // setting changed within a second of the last shot) is reopened.
+    const std::string device = Settings::values.audio_output_device_id.GetValue();
+    if (audio_stream != nullptr && device != audio_device_name) {
+        CloseAudio();
+    }
     if (audio_stream == nullptr) {
         // SDL audio stays initialized once it is: the SDL audio backend may share it.
         if (!SDL_WasInit(SDL_INIT_AUDIO)) {
@@ -114,8 +120,7 @@ void ScreenshotFeedback::PlayShutter(float gain) {
                 return;
             }
         }
-        // The output device the game's sound goes to, found as the SDL backend finds it.
-        const std::string device = Settings::values.audio_output_device_id.GetValue();
+        // Found as the SDL backend finds it.
         const SDL_AudioDeviceID playback =
             device.empty() || device == AudioCore::Sink::auto_device_name
                 ? SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK
@@ -126,6 +131,7 @@ void ScreenshotFeedback::PlayShutter(float gain) {
             LOG_WARNING(Frontend, "Screenshot sound: no playback device: {}", SDL_GetError());
             return;
         }
+        audio_device_name = device;
         SDL_ResumeAudioStreamDevice(audio_stream);
         LOG_DEBUG(Frontend, "Screenshot sound: playing on {}",
                   playback == SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK ? "the default device" : device);
