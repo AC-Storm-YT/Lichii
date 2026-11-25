@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numbers>
+#include <string>
 #include <QFontMetrics>
 #include <QPainter>
 #include <QPainterPath>
@@ -11,8 +12,11 @@
 #include <QVariantAnimation>
 #include <SDL3/SDL.h>
 
+#include "audio_core/sink/sdl3_sink.h"
+#include "audio_core/sink/sink.h"
 #include "common/common_types.h"
 #include "common/logging.h"
+#include "common/settings.h"
 #include "render/screenshot_feedback.h"
 
 namespace {
@@ -110,14 +114,21 @@ void ScreenshotFeedback::PlayShutter(float gain) {
                 return;
             }
         }
+        // The output device the game's sound goes to, found as the SDL backend finds it.
+        const std::string device = Settings::values.audio_output_device_id.GetValue();
+        const SDL_AudioDeviceID playback =
+            device.empty() || device == AudioCore::Sink::auto_device_name
+                ? SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK
+                : AudioCore::Sink::FindAudioDeviceByName(device, false);
         const SDL_AudioSpec spec{SDL_AUDIO_F32, 1, SampleRate};
-        audio_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec,
-                                                 nullptr, nullptr);
+        audio_stream = SDL_OpenAudioDeviceStream(playback, &spec, nullptr, nullptr);
         if (audio_stream == nullptr) {
             LOG_WARNING(Frontend, "Screenshot sound: no playback device: {}", SDL_GetError());
             return;
         }
         SDL_ResumeAudioStreamDevice(audio_stream);
+        LOG_DEBUG(Frontend, "Screenshot sound: playing on {}",
+                  playback == SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK ? "the default device" : device);
         if (shutter_sound.empty()) {
             shutter_sound = MakeShutterSound();
         }
