@@ -44,6 +44,7 @@
 
 #ifdef HAS_RESHADE
 #include "lichii/configuration/configure_post_processing.h"
+#include "video_core/post_processing/fx_preset.h"
 #endif
 
 ConfigureGraphics::ConfigureGraphics(
@@ -355,18 +356,46 @@ void ConfigureGraphics::Setup(const ConfigurationShared::Builder& builder) {
             hold_graphics.emplace(setting->Id(), widget);
 #ifdef HAS_RESHADE
         } else if (setting->Id() == Settings::values.post_shader_enabled.Id()) {
-            QPushButton* post_shader_button = new QPushButton(tr("Configure Effects..."), widget);
-            post_shader_button->setVisible(widget->checkbox->isChecked());
-
-            connect(post_shader_button, &QAbstractButton::clicked, this, [this]() {
-                ConfigurePostProcessing dialog(this);
-                dialog.exec();
-            });
-            connect(widget->checkbox, &QCheckBox::toggled, post_shader_button,
-                    &QWidget::setVisible);
-
             QBoxLayout* row = qobject_cast<QBoxLayout*>(widget->layout());
-            row->insertWidget(1, post_shader_button);
+            if (Settings::IsConfiguringGlobal()) {
+                QPushButton* post_shader_button =
+                    new QPushButton(tr("Configure Effects..."), widget);
+                post_shader_button->setVisible(widget->checkbox->isChecked());
+
+                connect(post_shader_button, &QAbstractButton::clicked, this, [this]() {
+                    ConfigurePostProcessing dialog(this);
+                    dialog.exec();
+                });
+                connect(widget->checkbox, &QCheckBox::toggled, post_shader_button,
+                        &QWidget::setVisible);
+                row->insertWidget(1, post_shader_button);
+            } else {
+                // A game picks one of the saved presets; editing effects stays global.
+                post_shader_preset_combobox = new QComboBox(widget);
+                post_shader_preset_combobox->setToolTip(
+                    tr("The effects preset this game loads when it starts."));
+                post_shader_preset_combobox->addItem(tr("Global preset"));
+                post_shader_preset_combobox->addItem(tr("No effects"));
+                for (const auto& preset : VideoCore::GetFxPresetCatalog()) {
+                    const QString name = QString::fromStdString(preset.name);
+                    post_shader_preset_combobox->addItem(name, name);
+                }
+
+                const auto& preset = Settings::values.post_shader_preset;
+                if (preset.UsingGlobal()) {
+                    post_shader_preset_combobox->setCurrentIndex(0);
+                } else if (preset.GetValue().empty()) {
+                    post_shader_preset_combobox->setCurrentIndex(1);
+                } else {
+                    const QString name = QString::fromStdString(preset.GetValue());
+                    if (post_shader_preset_combobox->findData(name) < 0) {
+                        post_shader_preset_combobox->addItem(name, name);
+                    }
+                    post_shader_preset_combobox->setCurrentIndex(
+                        post_shader_preset_combobox->findData(name));
+                }
+                row->insertWidget(1, post_shader_preset_combobox);
+            }
 
             hold_graphics.emplace(setting->Id(), widget);
 #endif
@@ -583,6 +612,25 @@ void ConfigureGraphics::ApplyConfiguration() {
     }
 
     UpdateVsyncSetting();
+
+#ifdef HAS_RESHADE
+    if (post_shader_preset_combobox != nullptr) {
+        const int index = post_shader_preset_combobox->currentIndex();
+        const bool use_global = index <= 0;
+        Settings::values.post_shader_preset.SetGlobal(use_global);
+        Settings::values.post_shader_chain.SetGlobal(use_global);
+        if (!use_global) {
+            const std::string name =
+                post_shader_preset_combobox->currentData().toString().toStdString();
+            Settings::values.post_shader_preset.SetValue(name);
+            if (const auto* preset = VideoCore::FindFxPreset(name)) {
+                Settings::values.post_shader_chain.SetValue(preset->chain);
+            } else if (name.empty()) {
+                Settings::values.post_shader_chain.SetValue(std::string());
+            }
+        }
+    }
+#endif
 
     Settings::RefreshNvidiaDlssRuntimeSettings();
 

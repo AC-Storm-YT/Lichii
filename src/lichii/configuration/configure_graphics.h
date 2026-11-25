@@ -113,4 +113,5 @@ private:
     QComboBox* aspect_ratio_combobox;
     QComboBox* resolution_combobox;
     QWidget* amd_fsr4_group{}; ///< The FSR 4 setting and AmdFsr4Panel
+    QComboBox* post_shader_preset_combobox{}; ///< A game's own effects preset (per-game only)
 };
