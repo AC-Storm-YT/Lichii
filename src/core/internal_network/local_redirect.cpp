@@ -16,6 +16,7 @@
 
 #include "common/fs/path_util.h"
 #include "common/logging.h"
+#include "common/nextendo.h"
 #include "common/settings.h"
 #include "core/internal_network/local_redirect.h"
 #include "core/internal_network/network.h"
@@ -97,6 +98,7 @@ struct Config {
     std::vector<std::string> hosts;
     std::optional<SockAddrIn> server;
     bool loopback_only{};
+    bool isolated{};
     std::vector<u8> test_ca;
 };
 
@@ -108,6 +110,8 @@ std::shared_ptr<const Config> Get() {
     return current_config;
 }
 
+} // Anonymous namespace
+
 bool IsLoopback(const SockAddrIn& address) {
     if (address.family == Domain::INET6) {
         static constexpr IPv6Address loopback{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1};
@@ -118,8 +122,6 @@ bool IsLoopback(const SockAddrIn& address) {
     }
     return address.ip[0] == 127;
 }
-
-} // Anonymous namespace
 
 std::vector<std::string> ParseHosts(std::string_view text) {
     std::vector<std::string> hosts;
@@ -160,6 +162,12 @@ void Configure() {
                  config->hosts.empty() ? "no host names" : fmt::format("{}", fmt::join(config->hosts, ", ")),
                  config->server ? SockAddrToString(*config->server) : "unchanged",
                  config->loopback_only, config->test_ca.size());
+    }
+    if (Settings::values.block_game_network.GetValue()) {
+        config->isolated = true;
+        config->loopback_only = true;
+        LOG_INFO(Network, "Game network access blocked: loopback only, no rooms, local wireless "
+                          "or online services");
     }
     std::scoped_lock lock{config_mutex};
     current_config = std::move(config);
@@ -233,6 +241,14 @@ bool Allowed(const SockAddrIn& address) {
 
 bool LoopbackOnly() {
     return Get()->loopback_only;
+}
+
+bool Isolated() {
+    return Get()->isolated;
+}
+
+bool OnlinePlayAllowed() {
+    return Common::Nextendo::OnlinePlayActive() && !Isolated();
 }
 
 std::vector<u8> TestCa() {
