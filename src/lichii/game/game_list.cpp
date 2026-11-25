@@ -774,8 +774,9 @@ void GameList::StartHeldDrag() {
         QGuiApplication::mouseButtons() != Qt::LeftButton) {
         return;
     }
-    const QModelIndex game = m_currentView->indexAt(drag_hold_start).siblingAtColumn(0);
-    if (game.data(GameListItem::TypeRole).value<GameListItemType>() != GameListItemType::Game) {
+    // The game pressed, if it is still the one under the press.
+    const QModelIndex game = drag_hold_game;
+    if (!game.isValid() || m_currentView->indexAt(drag_hold_start).siblingAtColumn(0) != game) {
         return;
     }
     m_currentView->setCurrentIndex(game);
@@ -1271,6 +1272,8 @@ void GameList::SetupScrollAnimation() {
 
 bool GameList::eventFilter(QObject* obj, QEvent* event) {
     if (obj == m_currentView->viewport() && event->type() == QEvent::Wheel) {
+        // Scrolling moves another game under a held one.
+        drag_hold_timer->stop();
         QWheelEvent* wheelEvent = static_cast<QWheelEvent*>(event);
 
         bool horizontal = wheelEvent->modifiers() & Qt::ShiftModifier;
@@ -1324,6 +1327,7 @@ bool GameList::eventFilter(QObject* obj, QEvent* event) {
                 index.siblingAtColumn(0).data(GameListItem::TypeRole).value<GameListItemType>() ==
                     GameListItemType::Game) {
                 drag_hold_start = mouse->position().toPoint();
+                drag_hold_game = index.siblingAtColumn(0);
                 drag_hold_timer->start();
             }
             break;

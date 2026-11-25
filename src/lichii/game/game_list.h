@@ -11,6 +11,7 @@
 #include <QHash>
 #include <QList>
 #include <QSet>
+#include <QPersistentModelIndex>
 #include <QPushButton>
 #include <QStandardItemModel>
 #include <QString>
@@ -220,6 +221,7 @@ private:
     /// Runs while a game is held still; when it fires the game is dragged instead of the list.
     QTimer* drag_hold_timer = nullptr;
     QPoint drag_hold_start;
+    QPersistentModelIndex drag_hold_game;
 
     struct ArtworkLookup {
         u64 program_id;

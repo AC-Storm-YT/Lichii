@@ -7,6 +7,7 @@
 
 #include "common/logging.h"
 #include "input_common/main.h"
+#include "qt_common/game_list/game_order.h"
 #include "qt_config.h"
 #include "uisettings.h"
 
@@ -358,7 +359,7 @@ void QtConfig::ReadUIGamelistValues() {
     for (int i = 0; i < order_size; i++) {
         SetArrayIndex(i);
         UISettings::values.game_order.append(
-            QString::fromStdString(ReadStringSetting(std::string("game"))));
+            GameOrder::Decode(QString::fromStdString(ReadStringSetting(std::string("game")))));
     }
     EndArray();
 
@@ -595,7 +596,8 @@ void QtConfig::SaveUIGamelistValues() {
     BeginArray(std::string("game_order"));
     for (int i = 0; i < UISettings::values.game_order.size(); i++) {
         SetArrayIndex(i);
-        WriteStringSetting(std::string("game"), UISettings::values.game_order[i].toStdString());
+        WriteStringSetting(std::string("game"),
+                           GameOrder::Encode(UISettings::values.game_order[i]).toStdString());
     }
     EndArray(); // game_order
 

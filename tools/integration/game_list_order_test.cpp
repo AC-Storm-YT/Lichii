@@ -38,6 +38,18 @@ int main() {
           QStringLiteral("C:/games/spin.nro"));
 #endif
 
+    // The config drops quotes and changes backslashes in a string: saved keys have neither, and
+    // read back unchanged.
+    for (const QString& key : {QStringLiteral("/games/a\"b.nro"), QStringLiteral("/games/a\\b.nro"),
+                               QStringLiteral("C:/Games/100% done.nro"),
+                               QStringLiteral("0100F17E57000000")}) {
+        const QString saved = GameOrder::Encode(key);
+        Check(!saved.contains(QLatin1Char('"')) && !saved.contains(QLatin1Char('\\')));
+        Check(GameOrder::Decode(saved) == key);
+    }
+    Check(GameOrder::Encode(QStringLiteral("0100F17E57000000")) ==
+          QStringLiteral("0100F17E57000000"));
+
     // Before or after a game further down, and before or after one further up.
     Check(Moved("A B C D", 0, 2, false) == List("B A C D"));
     Check(Moved("A B C D", 0, 2, true) == List("B C A D"));

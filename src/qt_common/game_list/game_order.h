@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <QByteArray>
 #include <QDir>
 #include <QHash>
 #include <QSet>
@@ -20,6 +21,16 @@ inline QString Key(quint64 program_id, const QString& path) {
         return QDir::cleanPath(QDir::fromNativeSeparators(path));
     }
     return QStringLiteral("%1").arg(program_id, 16, 16, QLatin1Char('0')).toUpper();
+}
+
+/// A key as saved in the config, which drops quotes and changes backslashes in a string: percent
+/// encoded, so that a path with either reads back unchanged.
+inline QString Encode(const QString& key) {
+    return QString::fromLatin1(key.toUtf8().toPercentEncoding("/:"));
+}
+
+inline QString Decode(const QString& saved) {
+    return QString::fromUtf8(QByteArray::fromPercentEncoding(saved.toLatin1()));
 }
 
 /// Writes `shown`, the keys of one folder's games in their new order, into `order`: they take the
