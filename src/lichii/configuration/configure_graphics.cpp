@@ -382,8 +382,16 @@ void ConfigureGraphics::Setup(const ConfigurationShared::Builder& builder) {
                 }
 
                 const auto& preset = Settings::values.post_shader_preset;
+                const auto& chain = Settings::values.post_shader_chain;
                 if (preset.UsingGlobal()) {
                     post_shader_preset_combobox->setCurrentIndex(0);
+                } else if (preset.GetValue().empty() && !chain.UsingGlobal() &&
+                           !chain.GetValue().empty()) {
+                    // Effects without a preset name: kept as they are unless another is picked.
+                    post_shader_custom_index = 2;
+                    post_shader_preset_combobox->insertItem(post_shader_custom_index,
+                                                            tr("Custom effects"));
+                    post_shader_preset_combobox->setCurrentIndex(post_shader_custom_index);
                 } else if (preset.GetValue().empty()) {
                     post_shader_preset_combobox->setCurrentIndex(1);
                 } else {
@@ -619,7 +627,7 @@ void ConfigureGraphics::ApplyConfiguration() {
         const bool use_global = index <= 0;
         Settings::values.post_shader_preset.SetGlobal(use_global);
         Settings::values.post_shader_chain.SetGlobal(use_global);
-        if (!use_global) {
+        if (!use_global && index != post_shader_custom_index) {
             const std::string name =
                 post_shader_preset_combobox->currentData().toString().toStdString();
             Settings::values.post_shader_preset.SetValue(name);
