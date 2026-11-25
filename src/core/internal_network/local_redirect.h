@@ -26,8 +26,9 @@
 /// names: titles that verify with the system store's lists can't be told apart by host name.
 /// Loopback only covers the guest's host sockets (BSD sockets, direct LAN play), not the traffic a
 /// multiplayer room relays.
-/// Settings::values.block_game_network turns loopback only on without a redirect, and also keeps
-/// games out of rooms, local wireless and the online services Lichii runs for them (Isolated).
+/// Settings::values.block_game_network turns loopback only on and drops the redirect's server, and
+/// also keeps games out of rooms, local wireless and the online services Lichii runs for them
+/// (Isolated).
 namespace Network::LocalRedirect {
 
 /// Reads the settings (and the CA file) for the game that is starting, and logs the mapping when

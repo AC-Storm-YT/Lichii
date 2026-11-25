@@ -8,6 +8,8 @@
 #include <atomic>
 #include <cstring>
 #include <limits>
+#include <mutex>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -1178,7 +1180,8 @@ Errno Socket::Bind(SockAddrIn addr) {
     if (!bind_addr) {
         LOG_DEBUG(Network, "Host redirect: bind to {} refused (loopback only)",
                   SockAddrToString(addr));
-        return ForDomain(socket_domain, Errno::ADDRNOTAVAIL);
+        // Not through ForDomain: its OTHER would reach an IPv4 guest as success.
+        return Errno::ADDRNOTAVAIL;
     }
     const HostSockAddr addr_in = TranslateFromSockAddrIn(*bind_addr);
     if (bind(fd, addr_in.Get(), addr_in.len) != SOCKET_ERROR) {
@@ -1192,6 +1195,9 @@ Errno Socket::BindLoopbackIfUnbound(const SockAddrIn* peer) {
     if (!LocalRedirect::LoopbackOnly()) {
         return Errno::SUCCESS;
     }
+    // Two sends on one socket from different threads must not both see it unbound.
+    static std::mutex bind_mutex;
+    std::scoped_lock lock{bind_mutex};
     // An unbound socket has no name on Windows, and port 0 elsewhere.
     sockaddr_storage name{};
     socklen_t name_len = sizeof(name);
@@ -1417,7 +1423,8 @@ std::pair<s32, Errno> Socket::SendTo(u32 flags, std::span<const u8> message,
 
     if (addr) {
         if (!LocalRedirect::Allowed(*addr)) {
-            return {-1, ForDomain(socket_domain, Errno::NETUNREACH)};
+            // Not through ForDomain: its OTHER would reach an IPv4 guest as success.
+            return {-1, Errno::NETUNREACH};
         }
         if (const Errno bind_errno = BindLoopbackIfUnbound(addr); bind_errno != Errno::SUCCESS) {
             return {-1, bind_errno};

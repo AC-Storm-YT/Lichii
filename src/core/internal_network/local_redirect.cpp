@@ -98,7 +98,6 @@ struct Config {
     std::vector<std::string> hosts;
     std::optional<SockAddrIn> server;
     bool loopback_only{};
-    bool isolated{};
     std::vector<u8> test_ca;
 };
 
@@ -164,7 +163,8 @@ void Configure() {
                  config->loopback_only, config->test_ca.size());
     }
     if (Settings::values.block_game_network.GetValue()) {
-        config->isolated = true;
+        // A redirect server would take the guest's 127.0.0.1:443 connections off the host.
+        config->server.reset();
         config->loopback_only = true;
         LOG_INFO(Network, "Game network access blocked: loopback only, no rooms, local wireless "
                           "or online services");
@@ -244,7 +244,8 @@ bool LoopbackOnly() {
 }
 
 bool Isolated() {
-    return Get()->isolated;
+    // Read from the setting, not the snapshot: BCAT prepares for a game before Configure runs.
+    return Settings::values.block_game_network.GetValue();
 }
 
 bool OnlinePlayAllowed() {
