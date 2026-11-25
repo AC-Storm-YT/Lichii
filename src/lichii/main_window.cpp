@@ -644,6 +644,8 @@ MainWindow::MainWindow(bool has_broken_vulkan)
         launch =
             Core::ParseLaunchParams(*QtCommon::system, args_cstr.size(), args_cstr.data(), nullptr);
     }
+    // -u may have picked another profile than the chip shows.
+    UpdateProfileButton();
     const bool launch_home = launch && launch->filepath.empty() && !launch->launch_setup &&
                              launch->launch_qlaunch;
     const bool launching_content =
