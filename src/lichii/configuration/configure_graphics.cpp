@@ -383,25 +383,31 @@ void ConfigureGraphics::Setup(const ConfigurationShared::Builder& builder) {
 
                 const auto& preset = Settings::values.post_shader_preset;
                 const auto& chain = Settings::values.post_shader_chain;
-                if (preset.UsingGlobal()) {
-                    post_shader_preset_combobox->setCurrentIndex(0);
-                } else if (preset.GetValue().empty() && !chain.UsingGlobal() &&
-                           !chain.GetValue().empty()) {
-                    // Effects without a preset name: kept as they are unless another is picked.
-                    post_shader_custom_index = 2;
-                    post_shader_custom_chain = chain.GetValue();
-                    post_shader_preset_combobox->insertItem(post_shader_custom_index,
+                const std::string preset_name = preset.UsingGlobal() ? "" : preset.GetValue();
+                if (preset_name.empty() && !chain.UsingGlobal() && !chain.GetValue().empty()) {
+                    // Effects without a preset name, also from configs older than this choice.
+                    post_shader_saved_index = 2;
+                    post_shader_preset_combobox->insertItem(post_shader_saved_index,
                                                             tr("Custom effects"));
-                    post_shader_preset_combobox->setCurrentIndex(post_shader_custom_index);
-                } else if (preset.GetValue().empty()) {
+                } else if (preset.UsingGlobal()) {
+                    post_shader_preset_combobox->setCurrentIndex(0);
+                } else if (preset_name.empty()) {
                     post_shader_preset_combobox->setCurrentIndex(1);
                 } else {
-                    const QString name = QString::fromStdString(preset.GetValue());
+                    const QString name = QString::fromStdString(preset_name);
                     if (post_shader_preset_combobox->findData(name) < 0) {
+                        // A preset that no longer exists keeps the effects it had.
                         post_shader_preset_combobox->addItem(name, name);
+                        post_shader_saved_index = post_shader_preset_combobox->count() - 1;
                     }
                     post_shader_preset_combobox->setCurrentIndex(
                         post_shader_preset_combobox->findData(name));
+                }
+                if (post_shader_saved_index >= 0) {
+                    post_shader_preset_combobox->setCurrentIndex(post_shader_saved_index);
+                    post_shader_saved_preset = preset_name;
+                    post_shader_saved_chain = chain.GetValue();
+                    post_shader_saved_chain_global = chain.UsingGlobal();
                 }
                 row->insertWidget(1, post_shader_preset_combobox);
             }
@@ -628,10 +634,13 @@ void ConfigureGraphics::ApplyConfiguration() {
         const bool use_global = index <= 0;
         Settings::values.post_shader_preset.SetGlobal(use_global);
         Settings::values.post_shader_chain.SetGlobal(use_global);
-        if (index == post_shader_custom_index) {
-            // Write the game's effects back: an Apply may have replaced them since.
-            Settings::values.post_shader_preset.SetValue(std::string());
-            Settings::values.post_shader_chain.SetValue(post_shader_custom_chain);
+        if (index == post_shader_saved_index) {
+            // Write back what the game had: an Apply may have replaced it since.
+            Settings::values.post_shader_preset.SetValue(post_shader_saved_preset);
+            Settings::values.post_shader_chain.SetGlobal(post_shader_saved_chain_global);
+            if (!post_shader_saved_chain_global) {
+                Settings::values.post_shader_chain.SetValue(post_shader_saved_chain);
+            }
         } else if (!use_global) {
             const std::string name =
                 post_shader_preset_combobox->currentData().toString().toStdString();

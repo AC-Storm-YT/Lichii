@@ -115,6 +115,10 @@ private:
     QComboBox* resolution_combobox;
     QWidget* amd_fsr4_group{}; ///< The FSR 4 setting and AmdFsr4Panel
     QComboBox* post_shader_preset_combobox{}; ///< A game's own effects preset (per-game only)
-    int post_shader_custom_index{-1}; ///< The "Custom effects" item, when the game has one
-    std::string post_shader_custom_chain; ///< The effects that item stands for
+    /// The item for effects only the game's config has ("Custom effects" or a missing preset),
+    /// and the preset name and chain it stands for
+    int post_shader_saved_index{-1};
+    std::string post_shader_saved_preset;
+    std::string post_shader_saved_chain;
+    bool post_shader_saved_chain_global{};
 };
