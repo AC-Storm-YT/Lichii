@@ -5881,6 +5881,11 @@ void MainWindow::OnCaptureScreenshot() {
             screenshot_feedback = new ScreenshotFeedback(this);
         }
         screenshot_feedback->Flash(ScreenshotFeedbackArea());
+        // At Lichii's volume, like the game's sound.
+        screenshot_feedback->PlayShutter(
+            Settings::values.audio_muted.GetValue()
+                ? 0.0f
+                : static_cast<float>(Settings::values.volume.GetValue()) / 100.0f);
     }
 }
 
