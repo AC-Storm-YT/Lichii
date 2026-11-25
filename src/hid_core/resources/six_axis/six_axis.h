@@ -91,6 +91,11 @@ private:
         Core::HID::SixAxisSensorState sixaxis_dual_right_state{};
         Core::HID::SixAxisSensorState sixaxis_left_lifo_state{};
         Core::HID::SixAxisSensorState sixaxis_right_lifo_state{};
+
+        // Per motion sensor: the controller's rotation at the last update, and the rotation games
+        // read, which adds each change scaled by the gyro sensitivity at that time.
+        std::array<Common::Vec<f32, 3>, 2> raw_rotation{};
+        std::array<Common::Vec<f32, 3>, 2> scaled_rotation{};
         int callback_key{};
     };
 

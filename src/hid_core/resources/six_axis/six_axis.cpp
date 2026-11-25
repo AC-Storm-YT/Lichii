@@ -88,7 +88,8 @@ void SixAxis::OnUpdate(const Core::Timing::CoreTiming& core_timing) {
             }
 
             const auto set_motion_state = [&](Core::HID::SixAxisSensorState& state,
-                                              const Core::HID::ControllerMotion& hid_state) {
+                                              std::size_t index) {
+                const Core::HID::ControllerMotion& hid_state = motion_state[index];
                 using namespace std::literals::chrono_literals;
                 static constexpr Core::HID::SixAxisSensorState default_motion_state = {
                     .delta_time = std::chrono::nanoseconds(5ms).count(),
@@ -116,7 +117,16 @@ void SixAxis::OnUpdate(const Core::Timing::CoreTiming& core_timing) {
                 const f32 gyro_scale =
                     static_cast<f32>(Settings::values.gyro_sensitivity.GetValue()) / 100.0f;
                 state.gyro = hid_state.gyro * gyro_scale;
-                state.rotation = hid_state.rotation * gyro_scale;
+                // Only new movement is scaled, so a sensitivity change doesn't move the total.
+                auto& raw = controller.raw_rotation[index];
+                auto& scaled = controller.scaled_rotation[index];
+                if (hid_state.rotation.Length() == 0.0f) {
+                    scaled = {}; // The controller reset its rotation (reconnect or calibration)
+                } else {
+                    scaled += (hid_state.rotation - raw) * gyro_scale;
+                }
+                raw = hid_state.rotation;
+                state.rotation = scaled;
                 state.orientation = hid_state.orientation;
             };
 
@@ -125,24 +135,24 @@ void SixAxis::OnUpdate(const Core::Timing::CoreTiming& core_timing) {
                 ASSERT(false);
                 break;
             case Core::HID::NpadStyleIndex::Fullkey:
-                set_motion_state(sixaxis_fullkey_state, motion_state[0]);
+                set_motion_state(sixaxis_fullkey_state, 0);
                 break;
             case Core::HID::NpadStyleIndex::Handheld:
-                set_motion_state(sixaxis_handheld_state, motion_state[0]);
+                set_motion_state(sixaxis_handheld_state, 0);
                 break;
             case Core::HID::NpadStyleIndex::JoyconDual:
-                set_motion_state(sixaxis_dual_left_state, motion_state[0]);
-                set_motion_state(sixaxis_dual_right_state, motion_state[1]);
+                set_motion_state(sixaxis_dual_left_state, 0);
+                set_motion_state(sixaxis_dual_right_state, 1);
                 break;
             case Core::HID::NpadStyleIndex::JoyconLeft:
-                set_motion_state(sixaxis_left_lifo_state, motion_state[0]);
+                set_motion_state(sixaxis_left_lifo_state, 0);
                 break;
             case Core::HID::NpadStyleIndex::JoyconRight:
-                set_motion_state(sixaxis_right_lifo_state, motion_state[1]);
+                set_motion_state(sixaxis_right_lifo_state, 1);
                 break;
             case Core::HID::NpadStyleIndex::Pokeball:
                 using namespace std::literals::chrono_literals;
-                set_motion_state(sixaxis_fullkey_state, motion_state[0]);
+                set_motion_state(sixaxis_fullkey_state, 0);
                 sixaxis_fullkey_state.delta_time = std::chrono::nanoseconds(15ms).count();
                 break;
             default:
