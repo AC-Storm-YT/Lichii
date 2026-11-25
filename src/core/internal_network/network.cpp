@@ -1196,8 +1196,7 @@ Errno Socket::BindLoopbackIfUnbound(const SockAddrIn* peer) {
         return Errno::SUCCESS;
     }
     // Two sends on one socket from different threads must not both see it unbound.
-    static std::mutex bind_mutex;
-    std::scoped_lock lock{bind_mutex};
+    std::scoped_lock lock{loopback_bind_mutex};
     // An unbound socket has no name on Windows, and port 0 elsewhere.
     sockaddr_storage name{};
     socklen_t name_len = sizeof(name);
