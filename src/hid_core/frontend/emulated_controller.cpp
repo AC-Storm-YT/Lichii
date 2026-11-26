@@ -82,11 +82,12 @@ private:
         });
     }
 
-    std::unique_ptr<Common::Input::InputDevice> first;
-    std::unique_ptr<Common::Input::InputDevice> second;
+    // Declared before the devices so they are destroyed after the devices' callbacks.
     std::mutex update_mutex;
     BindingState first_state{};
     BindingState second_state{};
+    std::unique_ptr<Common::Input::InputDevice> first;
+    std::unique_ptr<Common::Input::InputDevice> second;
 };
 
 std::unique_ptr<Common::Input::InputDevice> CreateButtonDevice(const Common::ParamPackage& params) {
