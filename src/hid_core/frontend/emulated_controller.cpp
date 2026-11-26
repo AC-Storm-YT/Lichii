@@ -23,6 +23,60 @@ constexpr Common::UUID TAS_UUID =
 constexpr Common::UUID VIRTUAL_UUID =
     Common::UUID{{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x7, 0xFF, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}};
 
+namespace {
+// A button with a second binding ("alt" in its params) is pressed while either binding is.
+class ButtonPairDevice final : public Common::Input::InputDevice {
+public:
+    ButtonPairDevice(std::unique_ptr<Common::Input::InputDevice> first_,
+                     std::unique_ptr<Common::Input::InputDevice> second_)
+        : first(std::move(first_)), second(std::move(second_)) {
+        first->SetCallback({.on_change = [this](const Common::Input::CallbackStatus& status) {
+            Update(first_status, status);
+        }});
+        second->SetCallback({.on_change = [this](const Common::Input::CallbackStatus& status) {
+            Update(second_status, status);
+        }});
+    }
+
+    void ForceUpdate() override {
+        first->ForceUpdate();
+        second->ForceUpdate();
+    }
+
+private:
+    void Update(Common::Input::ButtonStatus& binding, const Common::Input::CallbackStatus& status) {
+        // TransformToButton applies each binding's own inversion.
+        binding = TransformToButton(status);
+        binding.inverted = false;
+
+        // Toggle and turbo follow the binding that is pressed, the first one when both are.
+        auto button_status =
+            first_status.value || !second_status.value ? first_status : second_status;
+        button_status.value = first_status.value || second_status.value;
+        TriggerOnChange({
+            .type = Common::Input::InputType::Button,
+            .button_status = button_status,
+        });
+    }
+
+    std::unique_ptr<Common::Input::InputDevice> first;
+    std::unique_ptr<Common::Input::InputDevice> second;
+    Common::Input::ButtonStatus first_status{};
+    Common::Input::ButtonStatus second_status{};
+};
+
+std::unique_ptr<Common::Input::InputDevice> CreateButtonDevice(const Common::ParamPackage& params) {
+    if (!params.Has("alt")) {
+        return Common::Input::CreateInputDevice(params);
+    }
+    Common::ParamPackage first = params;
+    first.Erase("alt");
+    const Common::ParamPackage second{params.Get("alt", "")};
+    return std::make_unique<ButtonPairDevice>(Common::Input::CreateInputDevice(first),
+                                              Common::Input::CreateInputDevice(second));
+}
+} // namespace
+
 EmulatedController::EmulatedController(NpadIdType npad_id_type_) : npad_id_type(npad_id_type_) {}
 
 EmulatedController::~EmulatedController() = default;
@@ -199,7 +253,7 @@ void EmulatedController::LoadDevices() {
     LoadTASParams();
     LoadVirtualGamepadParams();
 
-    std::ranges::transform(button_params, button_devices.begin(), Common::Input::CreateInputDevice);
+    std::ranges::transform(button_params, button_devices.begin(), CreateButtonDevice);
     std::ranges::transform(stick_params, stick_devices.begin(), Common::Input::CreateInputDevice);
     std::ranges::transform(motion_params, motion_devices.begin(), Common::Input::CreateInputDevice);
     std::ranges::transform(trigger_params, trigger_devices.begin(),
