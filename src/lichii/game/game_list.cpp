@@ -147,22 +147,22 @@ void GameList::SetupViews() {
     carousel_view->SetModel(item_model);
 }
 
-QString GameList::GetLastFilterResultItem() const {
+QModelIndex GameList::GetFilterResult() const {
     if (m_isTreeMode) {
-        return tree_view->GetLastFilterResultItem();
+        return tree_view->GetFilterResult();
     }
     // The grid and the carousel show the games without folders, and filter alike. Only a sole
     // shown game is a result.
-    QString file_path;
+    QModelIndex result;
     for (int row = 0; row < item_model->rowCount(); ++row) {
         if (!grid_view->isRowHidden(row)) {
-            if (!file_path.isEmpty()) {
+            if (result.isValid()) {
                 return {};
             }
-            file_path = item_model->item(row)->data(GameListItemPath::FullPathRole).toString();
+            result = item_model->index(row, 0);
         }
     }
-    return file_path;
+    return result;
 }
 
 int GameList::GameCount() const {

@@ -74,7 +74,7 @@ public:
                       MainWindow* parent = nullptr);
     ~GameList() override;
 
-    QString GetLastFilterResultItem() const;
+    QModelIndex GetFilterResult() const;
     /// The games in the list, not counting Favorites' copies.
     int GameCount() const;
     void ClearFilter();
