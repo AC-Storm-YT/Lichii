@@ -19,24 +19,31 @@ constexpr auto ButtonA = Settings::NativeButton::A;
 
 class TestButton final : public Common::Input::InputDevice {
 public:
-    explicit TestButton(bool inverted_) : inverted{inverted_} {}
+    TestButton(bool inverted_, bool toggle_) : inverted{inverted_}, toggle{toggle_} {}
 
     void Press(bool pressed) {
         TriggerOnChange({
             .type = Common::Input::InputType::Button,
-            .button_status = {.value = pressed, .inverted = inverted},
+            .button_status = {.value = pressed, .inverted = inverted, .toggle = toggle},
         });
+    }
+
+    void Tap() {
+        Press(true);
+        Press(false);
     }
 
 private:
     bool inverted;
+    bool toggle;
 };
 
 class TestButtonFactory final : public Common::Input::Factory<Common::Input::InputDevice> {
 public:
     std::unique_ptr<Common::Input::InputDevice> Create(
         const Common::ParamPackage& params) override {
-        auto device = std::make_unique<TestButton>(params.Get("inverted", false));
+        auto device = std::make_unique<TestButton>(params.Get("inverted", false) != 0,
+                                                   params.Get("toggle", false) != 0);
         // Battery, colour and other devices are also made from button A's params; the button
         // device is made first.
         devices.emplace(params.Get("id", 0), device.get());
@@ -58,8 +65,11 @@ struct TestSetup {
         Settings::values.players.GetValue()[0] = saved;
     }
 
-    void BindA(const std::string& alt) {
+    void BindA(const std::string& alt, bool toggle = false) {
         Common::ParamPackage param{{"engine", "test_button"}, {"id", "1"}};
+        if (toggle) {
+            param.Set("toggle", true);
+        }
         if (!alt.empty()) {
             param.Set("alt", alt);
         }
@@ -132,4 +142,42 @@ TEST_CASE("A button without a second binding has one device", "[hid][emulated_co
     REQUIRE(setup.factory->devices.size() == 1);
     setup.factory->devices.at(1)->Press(true);
     REQUIRE(PressedA(controller));
+}
+
+TEST_CASE("A toggle binding stays toggled while the other binding is tapped",
+          "[hid][emulated_controller]") {
+    TestSetup setup;
+    setup.BindA(SecondBinding(), true);
+    EmulatedController controller(NpadIdType::Player1);
+    controller.ReloadFromSettings();
+
+    auto& first = *setup.factory->devices.at(1);
+    auto& second = *setup.factory->devices.at(2);
+    // Real devices report their state when the controller loads.
+    first.Press(false);
+
+    second.Press(true);
+    REQUIRE(PressedA(controller));
+    second.Press(false);
+    REQUIRE_FALSE(PressedA(controller));
+
+    first.Tap();
+    REQUIRE(PressedA(controller));
+    second.Tap();
+    REQUIRE(PressedA(controller));
+    first.Tap();
+    REQUIRE_FALSE(PressedA(controller));
+}
+
+TEST_CASE("Mapped devices include a second binding's device", "[hid][emulated_controller]") {
+    TestSetup setup;
+    setup.BindA(Common::ParamPackage{{"engine", "other_button"}, {"id", "2"}}.Serialize());
+    EmulatedController controller(NpadIdType::Player1);
+    controller.ReloadFromSettings();
+
+    bool found = false;
+    for (const auto& device : controller.GetMappedDevices()) {
+        found = found || device.Get("engine", "") == "other_button";
+    }
+    REQUIRE(found);
 }

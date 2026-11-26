@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <mutex>
 #include <common/scope_exit.h>
 
 #include <ranges>
@@ -31,10 +32,10 @@ public:
                      std::unique_ptr<Common::Input::InputDevice> second_)
         : first(std::move(first_)), second(std::move(second_)) {
         first->SetCallback({.on_change = [this](const Common::Input::CallbackStatus& status) {
-            Update(first_status, status);
+            Update(first_state, status);
         }});
         second->SetCallback({.on_change = [this](const Common::Input::CallbackStatus& status) {
-            Update(second_status, status);
+            Update(second_state, status);
         }});
     }
 
@@ -44,25 +45,48 @@ public:
     }
 
 private:
-    void Update(Common::Input::ButtonStatus& binding, const Common::Input::CallbackStatus& status) {
-        // TransformToButton applies each binding's own inversion.
-        binding = TransformToButton(status);
-        binding.inverted = false;
+    struct BindingState {
+        bool pressed{};
+        bool turbo{};
+        // Toggle bindings flip on each press.
+        bool toggled{};
+        bool locked{};
+    };
 
-        // Toggle and turbo follow the binding that is pressed, the first one when both are.
-        auto button_status =
-            first_status.value || !second_status.value ? first_status : second_status;
-        button_status.value = first_status.value || second_status.value;
+    void Update(BindingState& binding, const Common::Input::CallbackStatus& status) {
+        // Callbacks can come from different input threads.
+        std::scoped_lock lock{update_mutex};
+
+        // TransformToButton applies each binding's own inversion.
+        const auto button = TransformToButton(status);
+        binding.turbo = button.turbo;
+        if (button.toggle) {
+            if (button.value && !binding.locked) {
+                binding.toggled = !binding.toggled;
+            }
+            binding.locked = button.value;
+            binding.pressed = binding.toggled;
+        } else {
+            binding.toggled = false;
+            binding.locked = false;
+            binding.pressed = button.value;
+        }
+
+        // Turbo only while every pressed binding has it.
+        const bool pressed = first_state.pressed || second_state.pressed;
+        const bool turbo = pressed && (!first_state.pressed || first_state.turbo) &&
+                           (!second_state.pressed || second_state.turbo);
         TriggerOnChange({
             .type = Common::Input::InputType::Button,
-            .button_status = button_status,
+            .button_status = {.value = pressed, .turbo = turbo},
         });
     }
 
     std::unique_ptr<Common::Input::InputDevice> first;
     std::unique_ptr<Common::Input::InputDevice> second;
-    Common::Input::ButtonStatus first_status{};
-    Common::Input::ButtonStatus second_status{};
+    std::mutex update_mutex;
+    BindingState first_state{};
+    BindingState second_state{};
 };
 
 std::unique_ptr<Common::Input::InputDevice> CreateButtonDevice(const Common::ParamPackage& params) {
@@ -712,7 +736,14 @@ void EmulatedController::RestoreConfig() {
 
 std::vector<Common::ParamPackage> EmulatedController::GetMappedDevices() const {
     std::vector<Common::ParamPackage> devices;
+    // Second bindings can be on another device.
+    std::vector<Common::ParamPackage> all_button_params(button_params.begin(), button_params.end());
     for (const auto& param : button_params) {
+        if (param.Has("alt")) {
+            all_button_params.emplace_back(param.Get("alt", ""));
+        }
+    }
+    for (const auto& param : all_button_params) {
         if (!param.Has("engine")) {
             continue;
         }
