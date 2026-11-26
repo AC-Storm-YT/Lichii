@@ -1596,10 +1596,10 @@ void ConfigureInputPlayer::keyPressEvent(QKeyEvent* event) {
     }
     event->ignore();
     if (event->key() == Qt::Key_Tab || event->key() == Qt::Key_Backtab) {
-        // Shift+Tab arrives as Backtab, but the key pressed is still Tab.
+        // Accepted so that the dialog doesn't move the focus instead.
         event->accept();
-        input_subsystem->GetKeyboard()->PressKey(Qt::Key_Tab);
-    } else if (event->key() != Qt::Key_Escape) {
+    }
+    if (event->key() != Qt::Key_Escape) {
         input_subsystem->GetKeyboard()->PressKey(event->key());
     }
 }
