@@ -51,6 +51,17 @@ int GameGrid::ApplyFilter(const QString& edit_filter_text, GameListModel* model)
         setRowHidden(i, !matches);
         shown += matches ? 1 : 0;
     }
+
+    // Return activates the current game, so don't leave it on one the search hid.
+    if (currentIndex().isValid() && isRowHidden(currentIndex().row())) {
+        QModelIndex first_shown;
+        for (int i = 0; i < row_count && !first_shown.isValid(); ++i) {
+            if (!isRowHidden(i)) {
+                first_shown = model->index(i, 0);
+            }
+        }
+        setCurrentIndex(first_shown);
+    }
     return shown;
 }
 

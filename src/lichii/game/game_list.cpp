@@ -151,10 +151,14 @@ QString GameList::GetLastFilterResultItem() const {
     if (m_isTreeMode) {
         return tree_view->GetLastFilterResultItem();
     }
-    // The grid and the carousel show the games without folders, and filter alike.
+    // The grid and the carousel show the games without folders, and filter alike. Only a sole
+    // shown game is a result.
     QString file_path;
     for (int row = 0; row < item_model->rowCount(); ++row) {
         if (!grid_view->isRowHidden(row)) {
+            if (!file_path.isEmpty()) {
+                return {};
+            }
             file_path = item_model->item(row)->data(GameListItemPath::FullPathRole).toString();
         }
     }
@@ -687,6 +691,12 @@ void GameList::UpdateIconSizes() {
 }
 
 void GameList::ValidateEntry(const QModelIndex& item) {
+    // Qt can activate a current row the search has hidden.
+    const bool hidden = m_isTreeMode ? tree_view->isRowHidden(item.row(), item.parent())
+                                     : grid_view->isRowHidden(item.row());
+    if (hidden) {
+        return;
+    }
     const auto selected = item.sibling(item.row(), 0);
 
     switch (selected.data(GameListItem::TypeRole).value<GameListItemType>()) {
